@@ -66,7 +66,6 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95,
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
     
-    # Scale large values (your existing code)
     scalers = {}
     df_scaled = df_num.copy()
     for col in df_num.columns:
@@ -117,7 +116,6 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95,
                 if np.isnan(test_data[i, j]):
                     continue
                 
-                # Create dataset with this cell masked
                 train_plus_test = np.vstack([train_data, test_data[i:i+1, :]])
                 original_value = float(train_plus_test[-1, j])
                 train_plus_test[-1, j] = np.nan
@@ -148,7 +146,7 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95,
         avg_errors = np.divide(cell_errors, cell_counts)
         avg_errors[cell_counts == 0] = 0
     
-    # Create error dataframe
+    # error dataframe
     error_df = pd.DataFrame(avg_errors, columns=df_num.columns)
 
     mask = pd.DataFrame(False, index=df.index, columns=df.columns)
