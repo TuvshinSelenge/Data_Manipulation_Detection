@@ -41,7 +41,7 @@ The project includes a Streamlit web interface for easy testing and visualizatio
 
 ```bash
 # Install dependencies
-pip install streamlit pandas numpy scipy scikit-learn rpy2
+pip install streamlit pandas numpy scipy scikit-learn
 
 # Run the application
 streamlit run app.py
