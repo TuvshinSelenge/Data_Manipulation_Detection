@@ -107,7 +107,7 @@ except Exception as e:
     st.warning(f"Cellwise DDC detection not available: R package required")
 
 # Isolation Forest
-st.header("3. Column Isolation Forest")
+st.header("3. Isolation Forest")
 
 cellwise_iso_mask = detect_cellwise_isoforest(df_num, contamination=0.1, random_state=0)
 st.write("**Cells flagged as manipulated (red) by Isolation Forest (per column):**")
