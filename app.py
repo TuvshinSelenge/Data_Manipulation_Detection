@@ -153,10 +153,9 @@ try:
     )
     st.dataframe(styled_missForest)
     
-    # Show summary statistics
     suspicious_count = missForest.sum().sum()
     if suspicious_count > 0:
-        st.success(f"✅ Analysis complete! Found {suspicious_count} suspicious cells.")
+        st.success(f"✅ Analysis complete! Found {suspicious_count} suspicious cells using the missForest method.")
         with st.expander("Detailed Results"):
             st.write("**Suspicious cells by column:**")
             for col in missForest.columns:
