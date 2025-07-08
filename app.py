@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,7 +20,6 @@ This app applies several approaches to detect manipulated/outlier data cells:
 - **5. missForest with K-Crossvalidation**
 """)
 
-# Data Upload
 st.sidebar.header("1. Upload Data")
 uploaded_file = st.sidebar.file_uploader("CSV file", type=["csv"])
 
@@ -29,7 +29,6 @@ else:
     st.warning("Please upload a CSV file with numeric data to begin analysis.")
     st.stop() 
 
-# Select only numeric columns
 num_cols = df.select_dtypes(include=np.number).columns.tolist()
 df_num = df[num_cols].copy()
 
@@ -124,8 +123,6 @@ except Exception as e:
     import traceback
     st.code(traceback.format_exc())
 
-
-# Summary Table
 st.header("Summary: Manipulated Data Detected")
 st.markdown("""
 - **Red cells/rows** are flagged as manipulated or outlier by each respective method.

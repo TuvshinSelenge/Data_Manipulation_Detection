@@ -1,6 +1,14 @@
 
-# Cellwise Local Outlier Factor
+
 def detect_cellwise_lof(df, contamination=0.1, n_neighbors=10):
+    """
+    Detects outliers in each numeric column using Local Outlier Factor (LOF),
+    returning a boolean DataFrame mask with True for detected outlier cells.
+    
+    LOF identifies outliers by comparing how isolated a point is relative to its neighbors.
+    Points in sparse regions (far from neighbors) are flagged as outliers.
+
+    """
     import numpy as np
     import pandas as pd
     from sklearn.neighbors import LocalOutlierFactor

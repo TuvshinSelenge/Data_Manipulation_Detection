@@ -1,25 +1,10 @@
+
+
+
 def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_estimators=50, random_state=42):
     """
     Detects potentially manipulated cells using cross-validated missForest imputation,
     returning a boolean DataFrame mask with True for detected suspicious cells.
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        Input dataframe to check for manipulation
-    n_folds : int
-        Number of cross-validation folds (default: 5)
-    error_threshold_percentile : float
-        Percentile threshold for flagging high errors as suspicious (default: 95)
-    n_estimators : int
-        Number of trees in Random Forest (default: 50)
-    random_state : int
-        Random seed for reproducibility (default: 42)
-        
-    Returns:
-    --------
-    mask : pandas.DataFrame
-        Boolean mask with True for suspicious cells
     """
     import numpy as np
     import pandas as pd
@@ -31,16 +16,12 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
     import warnings
     warnings.filterwarnings('ignore')
     
-    # Select only numeric columns
     df_num = df.select_dtypes(include=[np.number]).copy()
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
-    
-    # Clean the data
-    # Replace infinity values with NaN first
+
     df_num = df_num.replace([np.inf, -np.inf], np.nan)
     
-    # Convert all columns to float to avoid integer/float issues
     for col in df_num.columns:
         df_num[col] = pd.to_numeric(df_num[col], errors='coerce').astype(float)
     
@@ -49,12 +30,11 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
     
-    # Remove columns that are all NaN
     df_num = df_num.dropna(axis=1, how='all')
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
     
-        # Store scalers for each column
+
     scalers = {}
     df_scaled = df_num.copy()
 
@@ -65,17 +45,13 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
             df_scaled[col] = scaler.fit_transform(df_num[[col]])
             scalers[col] = scaler
             print(f"Scaled column '{col}' due to large values")
-
-    # Use df_scaled instead of df_num for the rest of the function
     df_num = df_scaled
     
-    # Store original indices
     original_index = df_num.index
     df_num = df_num.reset_index(drop=True)
     
     n_records, n_features = df_num.shape
     
-    # Check if we have enough data
     if n_records < 10:
         print(f"Warning: Only {n_records} records available. Results may be unreliable.")
     
@@ -87,7 +63,6 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
     cell_errors = np.zeros((n_records, n_features))
     cell_counts = np.zeros((n_records, n_features))
     
-    # Create missForest imputer with more robust settings
     def get_imputer():
         return IterativeImputer(
             estimator=RandomForestRegressor(
@@ -97,26 +72,21 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
             ),
             max_iter=10,
             random_state=random_state,
-            initial_strategy='median',  # More robust than mean
+            initial_strategy='median',  
             imputation_order='ascending'
         )
     
-    # Cross-validation
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=random_state)
     
     fold_count = 0
     for train_idx, test_idx in kf.split(df_num):
         fold_count += 1
         
-        # Split data
         train_data = df_num.iloc[train_idx].values.astype(float)
         test_data = df_num.iloc[test_idx].values.astype(float)
         
-        # For each test record
         for i, test_record_idx in enumerate(test_idx):
-            # For each feature
             for j in range(n_features):
-                # Skip if value is already missing
                 if np.isnan(test_data[i, j]):
                     continue
                 
@@ -126,33 +96,27 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
                 train_plus_test[-1, j] = np.nan
                 
                 try:
-                    # Impute
                     imputer = get_imputer()
                     imputed_data = imputer.fit_transform(train_plus_test)
                     imputed_value = float(imputed_data[-1, j])
                     
-                    # Calculate normalized error
                     col_std = np.nanstd(train_data[:, j])
                     if col_std > 0 and not np.isnan(col_std):
                         error = abs(original_value - imputed_value) / col_std
                     else:
-                        # Use range-based normalization if std is 0
                         col_range = np.nanmax(train_data[:, j]) - np.nanmin(train_data[:, j])
                         if col_range > 0:
                             error = abs(original_value - imputed_value) / col_range
                         else:
                             error = abs(original_value - imputed_value)
-                    
-                    # Store error (cap at reasonable value to avoid outliers skewing results)
+
                     error = min(error, 10.0)
                     cell_errors[test_record_idx, j] += error
                     cell_counts[test_record_idx, j] += 1
                     
                 except Exception as e:
-                    # Skip this cell if imputation fails
                     continue
     
-    # Average errors across folds
     with np.errstate(divide='ignore', invalid='ignore'):
         avg_errors = np.divide(cell_errors, cell_counts)
         avg_errors[cell_counts == 0] = 0
@@ -162,9 +126,7 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
 
     mask = pd.DataFrame(False, index=df.index, columns=df.columns)
 
-    # Determine threshold for each column
     for idx, col in enumerate(df_num.columns):
-        # Get the original column name (before any transformations)
         original_col = df.select_dtypes(include=[np.number]).columns[idx]
         
         col_errors = error_df[col]
@@ -172,10 +134,8 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
         
         if len(col_errors_valid) > 0:
             threshold = np.percentile(col_errors_valid, error_threshold_percentile)
-            # Map back to original indices
             suspicious_mask = col_errors > threshold
             
-            # Use integer indexing to avoid issues
             for i, is_suspicious in enumerate(suspicious_mask):
                 if is_suspicious:
                     original_idx = original_index[i]
@@ -192,8 +152,6 @@ def diagnose_data_issues(df):
     import pandas as pd
     
     issues = []
-    
-    # Check numeric columns
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     
     for col in numeric_cols:

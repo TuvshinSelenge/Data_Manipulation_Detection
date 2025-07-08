@@ -1,5 +1,4 @@
 
-# Cellwise isolation forest
 
 def detect_cellwise_isoforest(df, contamination=0.1, random_state=0):
     """
