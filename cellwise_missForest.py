@@ -4,7 +4,8 @@
 def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, 
                                n_estimators=50, random_state=42, auto_optimize=True):
     """
-    Optimized version that's much faster - creates one imputer per fold instead of per cell.
+    Detects potentially manipulated cells using cross-validated missForest imputation,
+    with automatic parameter optimization based on dataset size.
     """
     import numpy as np
     import pandas as pd
