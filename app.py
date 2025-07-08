@@ -34,7 +34,6 @@ def convert_boolean_columns(df):
     df_converted = df.copy()
     
     for col in df_converted.columns:
-        # Check if column contains boolean-like values
         unique_values = df_converted[col].dropna().astype(str).str.upper().unique()
         
         if set(unique_values).issubset({'TRUE', 'FALSE', 'T', 'F'}):
@@ -167,7 +166,7 @@ try:
     
 except Exception as e:
     st.error(f"missForest detection failed: {str(e)}")
-    st.info("Try reducing the number of folds or adjusting parameters if the dataset is small.")
+    st.info("Reduce the number of folds or adjusting parameters if the dataset is small.")
 
 st.header("Summary: Manipulated Data Detected")
 st.markdown("""
