@@ -1,10 +1,11 @@
 
 
 
-def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_estimators=50, random_state=42):
+def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, 
+                               n_estimators=50, random_state=42, auto_optimize=True):
     """
     Detects potentially manipulated cells using cross-validated missForest imputation,
-    returning a boolean DataFrame mask with True for detected suspicious cells.
+    with automatic parameter optimization based on dataset size.
     """
     import numpy as np
     import pandas as pd
@@ -19,13 +20,44 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
     df_num = df.select_dtypes(include=[np.number]).copy()
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
+    
+    n_rows, n_cols = df_num.shape
+    total_cells = n_rows * n_cols
+    
+    if auto_optimize:
+        if total_cells > 100000:  
+            n_folds = 2
+            n_estimators = 10
+            max_iter = 3
+            print(f"Very large dataset ({n_rows}×{n_cols}). Using: {n_folds} folds, {n_estimators} trees")
+        elif total_cells > 50000:  
+            n_folds = 3
+            n_estimators = 20
+            max_iter = 5
+            print(f"Large dataset ({n_rows}×{n_cols}). Using: {n_folds} folds, {n_estimators} trees")
+        elif total_cells > 10000:  
+            n_folds = min(n_folds, 3)
+            n_estimators = min(n_estimators, 30)
+            max_iter = 7
+            print(f"Medium dataset ({n_rows}×{n_cols}). Using: {n_folds} folds, {n_estimators} trees")
+        else:  
+            max_iter = 10
+            print(f"Small dataset ({n_rows}×{n_cols}). Using default parameters")
+    else:
+        max_iter = 10
 
+    if n_cols > 50:
+        max_depth = 3
+    elif n_cols > 20:
+        max_depth = 4
+    else:
+        max_depth = 5
+    
     df_num = df_num.replace([np.inf, -np.inf], np.nan)
     
     for col in df_num.columns:
         df_num[col] = pd.to_numeric(df_num[col], errors='coerce').astype(float)
     
-    # Remove rows that are all NaN
     df_num = df_num.dropna(how='all')
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
@@ -34,30 +66,24 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
     if df_num.empty:
         return pd.DataFrame(False, index=df.index, columns=df.columns)
     
-
+    # Scale large values (your existing code)
     scalers = {}
     df_scaled = df_num.copy()
-
     for col in df_num.columns:
-        # Only scale if values are very large
         if df_num[col].max() > 1e9 or df_num[col].min() < -1e9:
             scaler = StandardScaler()
             df_scaled[col] = scaler.fit_transform(df_num[[col]])
             scalers[col] = scaler
-            print(f"Scaled column '{col}' due to large values")
-    df_num = df_scaled
     
+    df_num = df_scaled
     original_index = df_num.index
     df_num = df_num.reset_index(drop=True)
     
     n_records, n_features = df_num.shape
     
-    if n_records < 10:
-        print(f"Warning: Only {n_records} records available. Results may be unreliable.")
-    
     if n_records < n_folds:
-        n_folds = min(n_records, max(2, n_records // 2))
-        print(f"Adjusted folds to {n_folds} due to small dataset")
+        n_folds = max(2, n_records // 2)
+        print(f"Adjusted folds to {n_folds} due to small number of records")
     
     # Initialize error storage
     cell_errors = np.zeros((n_records, n_features))
@@ -68,14 +94,15 @@ def detect_cellwise_missforest(df, n_folds=5, error_threshold_percentile=95, n_e
             estimator=RandomForestRegressor(
                 n_estimators=n_estimators, 
                 random_state=random_state,
-                max_depth=5  # Limit depth to prevent overfitting on small data
+                max_depth=max_depth,
+                n_jobs=-1 
             ),
-            max_iter=10,
+            max_iter=max_iter,
             random_state=random_state,
-            initial_strategy='median',  
+            initial_strategy='median',
             imputation_order='ascending'
         )
-    
+
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=random_state)
     
     fold_count = 0
