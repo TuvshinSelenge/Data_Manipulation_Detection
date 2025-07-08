@@ -1,10 +1,49 @@
 # Data Manipulation Detection
 
-It is my interdisciplinary project to detect manipulation and also maybe to say how the data was manipulated.
+An interdisciplinary project for detecting data manipulation and identifying potential manipulation methods.
 
-For this problem, I am trying to tackle it from different perspectives.  I use for the detection part five different methods.
+## Overview
 
-1. Z-Scores is the statistical approach and the code for this can be found in the app.py file.
-2. Cellwise outlier detection for this approach I am using a R-Package created by Jakob Raymaekers and Peter J. Rousseeuw.
-3. Isolation forest is used for anomaly detection implemented using sklearn.
-4. Local outlier factor is also used by incorperating from sklearn.
+This project tackles data manipulation detection from multiple perspectives, implementing five different detection methods to identify suspicious or manipulated data points in datasets.
+
+## Detection Methods
+
+1. **Statistical Approach (Z-Score)**
+   - Uses z-score analysis to identify statistical outliers
+   - Implementation can be found in `app.py`
+
+2. **Cellwise Outlier Detection (DDC)**
+   - Utilizes the R package `cellWise` created by Jakob Raymaekers and Peter J. Rousseeuw
+   - Detects outliers at the cell level rather than row level
+   - Implementation in `cellwise_ddc.py`
+
+3. **Isolation Forest**
+   - Anomaly detection algorithm from scikit-learn
+   - Identifies outliers by isolating anomalies in the feature space
+   - Implementation in `cellwise_isoforest.py`
+
+4. **Local Outlier Factor (LOF)**
+   - Density-based anomaly detection from scikit-learn
+   - Identifies outliers based on local density deviation
+   - Implementation in `cellwise_lof.py`
+
+5. **missForest with K-Fold Cross-Validation**
+   - Supervised learning approach using Random Forest imputation
+   - Detects manipulation by identifying cells that are difficult to predict
+   - Implementation in `cellwise_missForest.py`
+   - Note: This method requires more computation time than others
+
+## Usage
+
+### Quick Start
+
+The project includes a Streamlit web interface for easy testing and visualization:
+
+```bash
+# Install dependencies
+pip install streamlit pandas numpy scipy scikit-learn rpy2
+
+# Run the application
+streamlit run app.py
+
+
