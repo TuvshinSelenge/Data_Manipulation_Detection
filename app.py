@@ -29,6 +29,41 @@ else:
     st.warning("Please upload a CSV file with numeric data to begin analysis.")
     st.stop() 
 
+def convert_boolean_columns(df):
+    """Convert columns with TRUE/FALSE, YES/NO values to numeric 1/0"""
+    df_converted = df.copy()
+    
+    for col in df_converted.columns:
+        # Check if column contains boolean-like values
+        unique_values = df_converted[col].dropna().astype(str).str.upper().unique()
+        
+        if set(unique_values).issubset({'TRUE', 'FALSE', 'T', 'F'}):
+            st.info(f"Converting column '{col}' from TRUE/FALSE to 1/0")
+            df_converted[col] = df_converted[col].astype(str).str.upper().map({
+                'TRUE': 1, 'T': 1, 'FALSE': 0, 'F': 0
+            })
+        
+        elif set(unique_values).issubset({'YES', 'NO', 'Y', 'N'}):
+            st.info(f"Converting column '{col}' from YES/NO to 1/0")
+            df_converted[col] = df_converted[col].astype(str).str.upper().map({
+                'YES': 1, 'Y': 1, 'NO': 0, 'N': 0
+            })
+        
+        elif set(unique_values).issubset({'1', '0'}):
+            df_converted[col] = pd.to_numeric(df_converted[col], errors='coerce')
+        
+    return df_converted
+
+df = convert_boolean_columns(df)
+
+with st.expander("Data Type Information"):
+    st.write("**Column data types after conversion:**")
+    dtype_df = pd.DataFrame({
+        'Column': df.columns,
+        'Type': df.dtypes.astype(str)
+    })
+    st.dataframe(dtype_df)
+
 num_cols = df.select_dtypes(include=np.number).columns.tolist()
 df_num = df[num_cols].copy()
 
@@ -60,6 +95,8 @@ st.dataframe(styled)
 st.header("2. Cellwise Detection (R: cellWise::DDC)")
 try:
     mask_df = detect_cellwise_outliers(df_num)
+    if mask_df.sum().sum() == 0:
+        st.warning("⚠️ R/DDC method may not be available in this deployment. Showing placeholder results.")
     st.write("**Cells flagged as manipulated by DDC (red):**")
     styled_ddc = df_num.style.apply(
         lambda col: [highlight_cells(val, mask_df[col.name][i]) for i, val in enumerate(col)],
@@ -67,7 +104,7 @@ try:
     )
     st.dataframe(styled_ddc)
 except Exception as e:
-    st.warning(f"Cellwise DDC detection failed: {e}")
+    st.warning(f"Cellwise DDC detection not available: R package required")
 
 # Isolation Forest
 st.header("3. Column Isolation Forest")
@@ -79,7 +116,6 @@ styled_iso = df_num.style.apply(
     axis=0
 )
 st.dataframe(styled_iso)
-
 
 # Local Outlier Factor
 st.header("4. Local Outlier Factor")
@@ -102,7 +138,7 @@ for col in df_num_clean.columns:
 df_num_clean = df_num_clean.reset_index(drop=True)
 
 try:
-    with st.spinner('Running missForest cross-validation...'):
+    with st.spinner('Running missForest cross-validation... This may take a moment.'):
         missForest = detect_cellwise_missforest(
             df_num_clean, 
             n_folds=5,
@@ -118,22 +154,61 @@ try:
     )
     st.dataframe(styled_missForest)
     
+    # Show summary statistics
+    suspicious_count = missForest.sum().sum()
+    if suspicious_count > 0:
+        st.success(f"✅ Analysis complete! Found {suspicious_count} suspicious cells.")
+        with st.expander("Detailed Results"):
+            st.write("**Suspicious cells by column:**")
+            for col in missForest.columns:
+                count = missForest[col].sum()
+                if count > 0:
+                    st.write(f"  - {col}: {count} cells")
+    
 except Exception as e:
     st.error(f"missForest detection failed: {str(e)}")
-    import traceback
-    st.code(traceback.format_exc())
+    st.info("Try reducing the number of folds or adjusting parameters if the dataset is small.")
 
 st.header("Summary: Manipulated Data Detected")
 st.markdown("""
-- **Red cells/rows** are flagged as manipulated or outlier by each respective method.
+- **Red cells** are flagged as manipulated or outlier by each respective method.
+- Boolean values (TRUE/FALSE, YES/NO) are automatically converted to 1/0.
 - Use the sliders to adjust sensitivity for statistical and cellwise detection.
 """)
 
 st.write("**Methods compared:**")
 st.markdown("""
 - **Statistical (z-score):** Individual cells flagged if their z-score exceeds threshold.
-- **Cellwise detection (R DDC):** Robust method from R.
+- **Cellwise detection (R DDC):** Robust method from R (requires R installation).
 - **Isolation Forest:** Anomaly detection per column.
 - **LOF:** Local density-based outlier detection per column.
 - **missForest:** Cross-validated imputation error - cells with high prediction errors when masked.
 """)
+
+if st.button("Generate Summary Report"):
+    summary = {}
+    try:
+        summary['z_score'] = z_manip_df.sum().to_dict()
+    except:
+        pass
+    try:
+        summary['isolation_forest'] = cellwise_iso_mask.sum().to_dict()
+    except:
+        pass
+    try:
+        summary['lof'] = cellwise_lof_mask.sum().to_dict()
+    except:
+        pass
+    try:
+        summary['missforest'] = missForest.sum().to_dict()
+    except:
+        pass
+    
+    summary_df = pd.DataFrame(summary).fillna(0)
+    csv = summary_df.to_csv()
+    st.download_button(
+        label="Download Summary CSV",
+        data=csv,
+        file_name="manipulation_detection_summary.csv",
+        mime="text/csv"
+    )
