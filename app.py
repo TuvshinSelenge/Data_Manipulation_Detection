@@ -1,8 +1,9 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 from scipy.stats import zscore
+import matplotlib.pyplot as plt
+import seaborn as sns
 from cellwise_ddc import detect_cellwise_outliers
 from cellwise_isoforest import detect_cellwise_isoforest
 from cellwise_lof import detect_cellwise_lof
@@ -76,10 +77,108 @@ st.dataframe(df_num.head())
 def highlight_cells(val, manip):
     return 'background-color: red' if manip else ''
 
+def create_visualization(df_data, mask_df, method_name, container):
+    """Create visualizations for detected outliers using matplotlib"""
+    with container:
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            x_col = st.selectbox(f"X-axis column ({method_name})", df_data.columns, key=f"x_{method_name}")
+        
+        with col2:
+            y_col = st.selectbox(f"Y-axis column ({method_name})", 
+                               [col for col in df_data.columns if col != x_col], 
+                               key=f"y_{method_name}")
+        
+        with col3:
+            plot_type = st.selectbox(f"Plot type ({method_name})", 
+                                   ["Scatter Plot", "Box Plot", "Bar Plot (Flagged Count)", "Heatmap"],
+                                   key=f"plot_{method_name}")
+        
+        #creating figures
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if plot_type == "Scatter Plot":
+            flagged_mask = mask_df[x_col] | mask_df[y_col]
+            normal_mask = ~flagged_mask
+            
+            ax.scatter(df_data.loc[normal_mask, x_col], 
+                      df_data.loc[normal_mask, y_col], 
+                      c='blue', label='Normal', alpha=0.6, s=50)
+            ax.scatter(df_data.loc[flagged_mask, x_col], 
+                      df_data.loc[flagged_mask, y_col], 
+                      c='red', label='Flagged', alpha=0.8, s=50)
+            
+            ax.set_xlabel(x_col)
+            ax.set_ylabel(y_col)
+            ax.set_title(f"{method_name}: {x_col} vs {y_col}")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+        elif plot_type == "Box Plot":
+            data_to_plot = []
+            labels = []
+            colors = []
+            
+            for col in [x_col, y_col]:
+                normal_data = df_data.loc[~mask_df[col], col].dropna()
+                flagged_data = df_data.loc[mask_df[col], col].dropna()
+                
+                if len(normal_data) > 0:
+                    data_to_plot.append(normal_data)
+                    labels.append(f"{col}\n(Normal)")
+                    colors.append('lightblue')
+                
+                if len(flagged_data) > 0:
+                    data_to_plot.append(flagged_data)
+                    labels.append(f"{col}\n(Flagged)")
+                    colors.append('lightcoral')
+            
+            bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True)
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+            
+            ax.set_title(f"{method_name}: Distribution of {x_col} and {y_col}")
+            ax.grid(True, alpha=0.3)
+            
+        elif plot_type == "Bar Plot (Flagged Count)":
+            flagged_counts = mask_df.sum()
+            total_counts = len(df_data)
+            normal_counts = total_counts - flagged_counts
+            
+            x = np.arange(len(flagged_counts))
+            width = 0.35
+            
+            ax.bar(x, normal_counts, width, label='Normal', color='lightblue')
+            ax.bar(x, flagged_counts, width, bottom=normal_counts, label='Flagged', color='lightcoral')
+            
+            ax.set_xlabel('Columns')
+            ax.set_ylabel('Count')
+            ax.set_title(f"{method_name}: Flagged Cells per Column")
+            ax.set_xticks(x)
+            ax.set_xticklabels(flagged_counts.index, rotation=45, ha='right')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+        else:
+            heatmap_data = mask_df.astype(int)
+            sns.heatmap(heatmap_data, 
+                       cmap=['white', 'red'], 
+                       cbar_kws={'label': 'Flagged (1) / Normal (0)'},
+                       ax=ax,
+                       vmin=0, vmax=1)
+            
+            ax.set_title(f"{method_name}: Heatmap of Flagged Cells")
+            ax.set_xlabel("Columns")
+            ax.set_ylabel("Row Index")
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+
 # Statistical Approach (Z-Score)
 st.header("1. Statistical Detection (Z-score)")
 zscores = np.abs(zscore(df_num, nan_policy='omit'))
-z_thresh = st.slider("Z-score threshold (for outlier)", 2.0, 5.0, 5.0)
+z_thresh = st.slider("Z-score threshold (for outlier)", 2.0, 5.0, 3.0)
 z_manip = (zscores > z_thresh)
 z_manip_df = pd.DataFrame(z_manip, columns=df_num.columns, index=df_num.index)
 
@@ -89,6 +188,10 @@ styled = df_num.style.apply(
     axis=0
 )
 st.dataframe(styled)
+
+# Z-score Visualization
+with st.expander("📊 Z-score Visualization"):
+    create_visualization(df_num, z_manip_df, "Z-score", st.container())
 
 # Cellwise Detection (R DDC)
 st.header("2. Cellwise Detection (R: cellWise::DDC)")
@@ -102,6 +205,11 @@ try:
         axis=0
     )
     st.dataframe(styled_ddc)
+    
+    # DDC Visualization
+    with st.expander("📊 DDC Visualization"):
+        create_visualization(df_num, mask_df, "DDC", st.container())
+        
 except Exception as e:
     st.warning(f"Cellwise DDC detection not available: R package required")
 
@@ -116,6 +224,10 @@ styled_iso = df_num.style.apply(
 )
 st.dataframe(styled_iso)
 
+# Isolation Forest Visualization
+with st.expander("📊 Isolation Forest Visualization"):
+    create_visualization(df_num, cellwise_iso_mask, "Isolation Forest", st.container())
+
 # Local Outlier Factor
 st.header("4. Local Outlier Factor")
 
@@ -126,6 +238,10 @@ styled_lof = df_num.style.apply(
     axis=0
 )
 st.dataframe(styled_lof)
+
+# LOF Visualization
+with st.expander("📊 LOF Visualization"):
+    create_visualization(df_num, cellwise_lof_mask, "LOF", st.container())
 
 # missForest
 st.header("5. missForest with K-Crossvalidation")
@@ -153,6 +269,10 @@ try:
     )
     st.dataframe(styled_missForest)
     
+    # missForest Visualization
+    with st.expander("📊 missForest Visualization"):
+        create_visualization(df_num_clean, missForest, "missForest", st.container())
+    
     suspicious_count = missForest.sum().sum()
     if suspicious_count > 0:
         st.success(f"✅ Analysis complete! Found {suspicious_count} suspicious cells using the missForest method.")
@@ -167,9 +287,77 @@ except Exception as e:
     st.error(f"missForest detection failed: {str(e)}")
     st.info("Reduce the number of folds or adjusting parameters if the dataset is small.")
 
+# Summary Comparison
+st.header("📊 Summary: Method Comparison")
+methods = []
+total_flagged = []
+all_masks = {}
+
+if 'z_manip_df' in locals():
+    methods.append("Z-score")
+    total_flagged.append(z_manip_df.sum().sum())
+    all_masks["Z-score"] = z_manip_df
+
+if 'mask_df' in locals():
+    methods.append("DDC")
+    total_flagged.append(mask_df.sum().sum())
+    all_masks["DDC"] = mask_df
+
+if 'cellwise_iso_mask' in locals():
+    methods.append("Isolation Forest")
+    total_flagged.append(cellwise_iso_mask.sum().sum())
+    all_masks["Isolation Forest"] = cellwise_iso_mask
+
+if 'cellwise_lof_mask' in locals():
+    methods.append("LOF")
+    total_flagged.append(cellwise_lof_mask.sum().sum())
+    all_masks["LOF"] = cellwise_lof_mask
+
+if 'missForest' in locals():
+    methods.append("missForest")
+    total_flagged.append(missForest.sum().sum())
+    all_masks["missForest"] = missForest
+
+if methods:
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.bar(methods, total_flagged, color='skyblue')
+        ax.set_xlabel('Method')
+        ax.set_ylabel('Total Flagged Cells')
+        ax.set_title('Total Flagged Cells by Method')
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        st.pyplot(fig)
+    
+    with col2:
+        if len(all_masks) > 1:
+            consensus_matrix = None
+            for method, mask in all_masks.items():
+                if consensus_matrix is None:
+                    consensus_matrix = mask.astype(int)
+                else:
+                    # Ensure same shape
+                    if mask.shape == consensus_matrix.shape:
+                        consensus_matrix += mask.astype(int)
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            sns.heatmap(consensus_matrix, 
+                       cmap='Reds', 
+                       cbar_kws={'label': 'Number of Methods Flagging'},
+                       ax=ax)
+            ax.set_title('Consensus: Number of Methods Flagging Each Cell')
+            ax.set_xlabel("Columns")
+            ax.set_ylabel("Row Index")
+            plt.tight_layout()
+            st.pyplot(fig)
+
 st.header("Summary: Manipulated Data Detected")
 st.markdown("""
 - **Red cells** are flagged as manipulated or outlier by each respective method.
+- **Visualizations** help identify patterns and relationships in the flagged data.
 - Boolean values (TRUE/FALSE, YES/NO) are automatically converted to 1/0.
 - Use the sliders to adjust sensitivity for statistical and cellwise detection.
 """)
