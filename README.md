@@ -46,4 +46,8 @@ pip install streamlit pandas numpy scipy scikit-learn
 # Run the application
 streamlit run app.py
 
+```
+
+Or just click on this link: https://datamanipulationdetection.streamlit.app/
+
 
